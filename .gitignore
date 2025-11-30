@@ -5,3 +5,4 @@
 test_models.py
 ia-afanador.py
 *.json
+docker-compose.yaml
