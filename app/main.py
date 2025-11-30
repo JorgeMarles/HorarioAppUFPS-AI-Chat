@@ -1,19 +1,33 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from .chat_service import chat_service
+from fastapi.middleware.cors import CORSMiddleware
+from .service.chat_service import chat_service
 from .models import (
     CreateSessionResponse,
     SendMessageRequest,
     SendMessageResponse,
     ListSessionsResponse,
 )
+from .middleware.middleware import JWTPassthroughMiddleware
 
 app = FastAPI(title="Gemini Chat API", version="1.0.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especifica dominios específicos
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(
+    JWTPassthroughMiddleware
+)
+
 @app.post("/chat/session", response_model=CreateSessionResponse)
-def create_session():
+def create_session(payload: CreateSessionResponse):
     try:
-        sid = chat_service.create_session()
+        sid = chat_service.create_session(payload.session_id)
         return CreateSessionResponse(session_id=sid)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -24,14 +38,13 @@ def list_sessions():
 
 @app.post("/chat/message", response_model=SendMessageResponse)
 def send_message(payload: SendMessageRequest):
-    if payload.session_id not in chat_service.list_sessions():
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
     try:
         reply = chat_service.send_message(payload.session_id, payload.message)
         return SendMessageResponse(session_id=payload.session_id, reply=reply)
     except KeyError:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/stream")
