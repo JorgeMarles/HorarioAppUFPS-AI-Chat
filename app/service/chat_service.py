@@ -1,37 +1,37 @@
-import google.genai as genai
-from typing import List
-from app.config import get_settings
-from google.genai import types
+from typing import List, Generator
 from .redis_service import redis_service
-import os
-
-def get_prompt():
-    # Obtener la ruta del directorio donde está este archivo
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(os.path.dirname(current_dir))  # Sube 2 niveles: service -> app -> ai-assistant
-    prompt_path = os.path.join(root_dir, 'prompt.txt')
-    
-    with open(prompt_path, 'r', encoding='utf-8') as file:
-        return file.read()
+from .chat import Chat
+import json
 
 class ChatService:
     def __init__(self):
-        settings = get_settings()
-        if not settings.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY no configurada")
-        self.model_name = settings.model_name
-        self.client = genai.Client(api_key=settings.gemini_api_key)
+        pass
 
-
-    def create_session(self, session_id: int) -> int:        
+    def create_session(self, session_id: int) -> int:
         # Crear historial vacío en Redis
         redis_service.set_chat_history(session_id, [])
         redis_service.add_session(session_id)
-        
+
         return session_id
 
     def list_sessions(self) -> List[int]:
         return [int(x) for x in redis_service.get_sessions()]
+
+    def _serialize_message_content(self, content):
+        """Convert Gemini Content objects to simple text"""
+        if hasattr(content, 'text'):
+            return content.text
+        elif hasattr(content, 'parts') and content.parts:
+            # Extract text from parts
+            text_parts = []
+            for part in content.parts:
+                if hasattr(part, 'text'):
+                    text_parts.append(part.text)
+            return ''.join(text_parts)
+        elif isinstance(content, str):
+            return content
+        else:
+            return str(content)
 
     def _get_chat_from_history(self, session_id: int):
         """Crear objeto chat desde el historial guardado"""
@@ -39,23 +39,8 @@ class ChatService:
         if history is None:
             self.create_session(session_id)
             history = redis_service.get_chat_history(session_id)
-        
-        # Adaptar historial al formato de google.genai
-        gemini_history = []
-        for msg in history:
-            gemini_history.append({
-                "role": msg["role"],
-                "parts": [msg["content"]]
-            })
 
-        # Crear el chat con system_instruction y el historial previo (sin tools)
-        chat = self.client.chats.create(
-            model=self.model_name,
-            config=types.GenerateContentConfig(
-                system_instruction=get_prompt()
-            ),
-            history=gemini_history
-        )
+        chat = Chat(history)
 
         return chat, history
 
@@ -65,46 +50,56 @@ class ChatService:
 
     def send_message(self, session_id: int, message: str) -> str:
         chat, history = self._get_chat_from_history(session_id)
-        
+
         # Enviar mensaje
-        response = chat.send_message(message)
-        response_text = response.text or ""
-        
+        response_text = chat.send_message(message)
+
+        # Serialize content properly before storing
+        user_content = self._serialize_message_content(message)
+        model_content = self._serialize_message_content(response_text)
+
         # Actualizar historial
-        history.append({"role": "user", "content": message})
-        history.append({"role": "model", "content": response_text})
-        
+        history.append({"role": "user", "content": user_content})
+        history.append({"role": "model", "content": model_content})
+
         # Guardar historial actualizado
         self._save_history(session_id, history)
-        
-        return response_text
 
-    def stream_message(self, session_id: int, message: str):
+        return response_text
+    
+    def send_message_stream(self, session_id: int, message: str, jwt: str) -> Generator[str, None, None]:
+        """Envía mensaje con streaming de eventos"""
         chat, history = self._get_chat_from_history(session_id)
         
-        # Stream del mensaje
-        stream = chat.send_message(message, stream=True)
-        
-        chunk_count = 0
-        accumulated_response = []
-        
-        for chunk in stream:
-            part_text = getattr(chunk, 'text', '') or ''
-            if part_text:
-                chunk_count += 1
-                accumulated_response.append(part_text)
-                yield part_text
-        
-        # Guardar historial después del stream completo
-        full_response = ''.join(accumulated_response)
-        history.append({"role": "user", "content": message})
-        history.append({"role": "model", "content": full_response})
-        
-        self._save_history(session_id, history)
-        print(f"Stream completado. Total chunks: {chunk_count}")
+        yield f"data: {json.dumps({'type': 'status', 'message': 'Procesando mensaje...'})}\n\n"
+
+        context = {
+            "jwt": jwt,
+            "schedule_id": session_id
+        }
+
+        try:
+            # Enviar mensaje y obtener respuesta con streaming
+            for event in chat.send_message_stream(message, context):
+                yield f"data: {json.dumps(event)}\n\n"
+            
+            # Actualizar historial al final
+            user_content = self._serialize_message_content(message)
+            model_content = chat.get_last_response()
+            
+            history.append({"role": "user", "content": user_content})
+            history.append({"role": "model", "content": model_content})
+            
+            self._save_history(session_id, history)
+            
+            yield f"data: {json.dumps({'type': 'complete', 'message': 'Conversación guardada'})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     def delete_session(self, session_id: int):
         """Eliminar una sesión"""
         redis_service.delete_session(session_id)
+
 
 chat_service = ChatService()

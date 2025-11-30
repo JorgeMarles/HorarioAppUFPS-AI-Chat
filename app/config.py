@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     gemini_api_key: str
     model_name: str = "gemini-1.5-flash"
     redis_url: str = "redis://localhost:6379/0"
+    backend_url: str = "http://localhost:8081/"
 
     class Config:
         env_file = ".env"
