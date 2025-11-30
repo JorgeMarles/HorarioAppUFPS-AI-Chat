@@ -44,7 +44,6 @@ def send_message(payload: SendMessageRequest):
     except KeyError:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/stream")

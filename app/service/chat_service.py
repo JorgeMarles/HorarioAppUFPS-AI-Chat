@@ -1,15 +1,27 @@
-import google.generativeai as genai
+import google.genai as genai
 from typing import List
 from app.config import get_settings
+from google.genai import types
 from .redis_service import redis_service
+import os
+
+def get_prompt():
+    # Obtener la ruta del directorio donde está este archivo
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(os.path.dirname(current_dir))  # Sube 2 niveles: service -> app -> ai-assistant
+    prompt_path = os.path.join(root_dir, 'prompt.txt')
+    
+    with open(prompt_path, 'r', encoding='utf-8') as file:
+        return file.read()
 
 class ChatService:
     def __init__(self):
         settings = get_settings()
         if not settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY no configurada")
-        genai.configure(api_key=settings.gemini_api_key)
         self.model_name = settings.model_name
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+
 
     def create_session(self, session_id: int) -> int:        
         # Crear historial vacío en Redis
@@ -28,18 +40,23 @@ class ChatService:
             self.create_session(session_id)
             history = redis_service.get_chat_history(session_id)
         
-        # Crear nuevo chat con el historial
-        model = genai.GenerativeModel(self.model_name)
-        
-        # Convertir formato del historial para Gemini
+        # Adaptar historial al formato de google.genai
         gemini_history = []
         for msg in history:
             gemini_history.append({
                 "role": msg["role"],
                 "parts": [msg["content"]]
             })
-        
-        chat = model.start_chat(history=gemini_history)
+
+        # Crear el chat con system_instruction y el historial previo (sin tools)
+        chat = self.client.chats.create(
+            model=self.model_name,
+            config=types.GenerateContentConfig(
+                system_instruction=get_prompt()
+            ),
+            history=gemini_history
+        )
+
         return chat, history
 
     def _save_history(self, session_id: int, history: List):
