@@ -11,6 +11,7 @@ class BackendService:
     async def _get(self, endpoint: str, jwt: str) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             url = f"{self.backend_url}{endpoint}"
+            print(f"GET {url}")
             response = await client.get(
                 url,
                 headers={
@@ -23,6 +24,7 @@ class BackendService:
     async def _post(self, endpoint: str, jwt: str, data: Dict[str, Any] = None) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             url = f"{self.backend_url}{endpoint}"
+            print(f"POST {url}")
             response = await client.post(
                 url,
                 headers={
@@ -36,6 +38,7 @@ class BackendService:
     async def _put(self, endpoint: str, jwt: str, data: Dict[str, Any] = None) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             url = f"{self.backend_url}{endpoint}"
+            print(f"PUT {url}")
             response = await client.put(
                 url,
                 headers={
@@ -49,6 +52,7 @@ class BackendService:
     async def _delete(self, endpoint: str, jwt: str) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             url = f"{self.backend_url}{endpoint}"
+            print(f"DELETE {url}")
             response = await client.delete(
                 url,
                 headers={
