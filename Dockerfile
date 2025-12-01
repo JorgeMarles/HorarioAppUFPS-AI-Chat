@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código de la aplicación
 COPY app ./app
-COPY prompt.txt ./prompt.txt
 
 # Variables de entorno por defecto
 ENV PYTHONPATH=/app
