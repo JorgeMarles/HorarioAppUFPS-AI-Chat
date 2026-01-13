@@ -9,6 +9,9 @@ from .models import (
     ListSessionsResponse,
 )
 import warnings
+from app.config import get_settings
+import json
+
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", message=".*pydantic.*")
@@ -49,7 +52,11 @@ def list_sessions():
 
 @app.post("/chat/message", response_model=SendMessageResponse)
 def send_message(payload: SendMessageRequest, token: str = Depends(get_jwt_token)):
+    if not get_settings().chat_active:
+        raise HTTPException(status_code=503, detail='Actualmente el chatbot no está activo, por favor inténtalo después')
+
     try:
+        
         reply = chat_service.send_message(payload.session_id, payload.message)
         return SendMessageResponse(session_id=payload.session_id, reply=reply)
     except KeyError:
@@ -62,6 +69,10 @@ def stream_message(payload: SendMessageRequest, token: str = Depends(get_jwt_tok
     """Endpoint para streaming con SSE"""
     try:
         # Verificar que la sesión existe o crearla
+
+        if not get_settings().chat_active:
+            yield f"data: {json.dumps({'type': 'complete', 'message': 'Actualmente el chatbot no está activo, por favor inténtalo después'})}\n\n"
+
         sessions = chat_service.list_sessions()
         if payload.session_id not in sessions:
             chat_service.create_session(payload.session_id)

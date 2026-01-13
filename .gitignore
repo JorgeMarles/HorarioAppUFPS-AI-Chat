@@ -1,6 +1,7 @@
 /venv/
 .env
 .env.example
+*.env
 **/__pycache__/**
 test_models.py
 ia-afanador.py

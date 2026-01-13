@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_name: str = "gemini-1.5-flash"
     redis_url: str = "redis://localhost:6379/0"
     backend_url: str = "http://localhost:8081/"
+    chat_active: bool = False
 
     class Config:
         env_file = ".env"
