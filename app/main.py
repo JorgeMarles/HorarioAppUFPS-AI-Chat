@@ -70,19 +70,19 @@ def stream_message(payload: SendMessageRequest, token: str = Depends(get_jwt_tok
     try:
         # Verificar que la sesión existe o crearla
 
-        if not get_settings().chat_active:
-            yield f"data: {json.dumps({'type': 'complete', 'message': 'Actualmente el chatbot no está activo, por favor inténtalo después'})}\n\n"
-
         sessions = chat_service.list_sessions()
         if payload.session_id not in sessions:
             chat_service.create_session(payload.session_id)
 
         def event_generator():
-            try:
-                for chunk in chat_service.send_message_stream(payload.session_id, payload.message, token):
-                    yield chunk
-            except Exception as e:
-                yield f"data: {{\"type\": \"error\", \"message\": \"{str(e)}\"}}\n\n"
+            if not get_settings().chat_active:
+                yield f"data: {json.dumps({'type': 'complete', 'message': 'Actualmente el chatbot no está activo, por favor inténtalo después'})}\n\n"
+            else:
+                try:
+                    for chunk in chat_service.send_message_stream(payload.session_id, payload.message, token):
+                        yield chunk
+                except Exception as e:
+                    yield f"data: {{\"type\": \"error\", \"message\": \"{str(e)}\"}}\n\n"
 
         return StreamingResponse(
             event_generator(), 
