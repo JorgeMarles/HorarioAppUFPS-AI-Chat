@@ -76,7 +76,7 @@ def stream_message(payload: SendMessageRequest, token: str = Depends(get_jwt_tok
 
         def event_generator():
             if not get_settings().chat_active:
-                yield f"data: {json.dumps({'type': 'complete', 'message': 'Actualmente el chatbot no está activo, por favor inténtalo después'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Actualmente el chatbot no está activo, por favor inténtalo después'})}\n\n"
             else:
                 try:
                     for chunk in chat_service.send_message_stream(payload.session_id, payload.message, token):
